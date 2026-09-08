@@ -8,6 +8,15 @@ bar, **how long it has been since the last model output**. When you run several
 opencode windows side by side, it lets you tell at a glance which one is stuck
 and which one is still working.
 
+## Screenshot
+
+![screenshot](assets/screenshot.png)
+
+The prompt bar in a busy session: `TPS 12…` from `opencode-tps`, and next to
+it this plugin's `> 0s` — the model is generating, so the timer keeps resetting.
+When the session goes idle it switches to `~ Ns` and starts counting up
+(yellow > 20s, red > 60s).
+
 ## Features
 
 - Live countdown of seconds since the last model output / activity
@@ -28,8 +37,8 @@ It is a local TUI plugin (source `"file"`), so you install it from a local
 package path rather than from npm.
 
 ```bash
-# clone or copy the repo, then:
-opencode plugin -g /path/to/opencode-activity-timer
+git clone https://github.com/wood-j/opencode-activity-timer.git
+opencode plugin -g ~/opencode-activity-timer
 ```
 
 Or add it to your global `~/.config/opencode/tui.json` by hand:
