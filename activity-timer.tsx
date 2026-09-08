@@ -10,6 +10,13 @@ import type { TuiPlugin } from "@opencode-ai/plugin/tui"
 const WARN_S = 20   // longer than this -> yellow (possibly stuck)
 const ALERT_S = 60  // longer than this -> red (almost certainly stuck)
 
+// Perf: the original version bumped the render signal on EVERY stream delta
+// (tens per second), re-rendering the slot each time and stalling the whole
+// TUI frame pipeline on busy machines (same hotspot the TPS plugin patched,
+// see the fork patch notes). Display is 1s-granular, so throttle re-renders
+// to 500ms; the 1s tick is the backstop.
+const RENDER_MIN_GAP_MS = 500
+
 interface DeltaEvent {
   type: "message.part.delta"
   properties: { sessionID: string; field: string }
@@ -28,10 +35,17 @@ const tui: TuiPlugin = async (api) => {
   const lastActivity = new Map<string, number>()
   const [version, setVersion] = createSignal(0)
   const [tick, setTick] = createSignal(0)
+  let lastRender = 0
 
   function mark(sessionID: string) {
     lastActivity.set(sessionID, Date.now())
-    setVersion((v) => v + 1)
+    // Throttle re-renders: per-delta setVersion stalls the TUI render
+    // pipeline on busy machines (same hotspot the TPS plugin patched).
+    const now = Date.now()
+    if (now - lastRender >= RENDER_MIN_GAP_MS) {
+      lastRender = now
+      setVersion((v) => v + 1)
+    }
   }
 
   // Streaming text delta -> the model is producing output, reset the timer
@@ -97,10 +111,14 @@ const tui: TuiPlugin = async (api) => {
         let label: string
 
         if (v.active) {
-          // Currently generating: show throughput duration (deltas keep
-          // resetting it, so it hovers near 0)
+          // Currently generating: deltas keep resetting it, so it hovers
+          // near 0 while the model is flowing. If it grows large while
+          // still active, the request itself is hanging -> color it like
+          // an idle timeout so the stuck window jumps out too.
           color = info
           label = `> ${v.s}s`
+          if (v.s > ALERT_S) color = error
+          else if (v.s > WARN_S) color = warning
         } else if (v.s < 0) {
           label = "—"
         } else {
